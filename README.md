@@ -31,6 +31,17 @@ While paused, try in the Debug Console: `counter`, `item.value * 10`,
 
 Run without debugging (what production would do): `./bin/demo -nodebug testdata/sample.js`.
 
+## Examples
+
+`examples/` is a separate module (so demos can't leak dependencies into the
+debugger's `go.mod`) holding example hosts. Start with the event host —
+the embedding shape `cmd/demo` doesn't show, where the script registers
+handlers and the host calls into JS as events arrive:
+
+```sh
+make run-events    # then F5, and see examples/README.md for what to try
+```
+
 ## Tests
 
 `make test` — includes an end-to-end test that speaks DAP over TCP and

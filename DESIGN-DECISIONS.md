@@ -293,8 +293,7 @@ is a demo nobody clones.
 So: **one repository, two modules.** The debugger's `go.mod` stays at the root
 with sobek as its only requirement. Example hosts go under `examples/` with
 their *own* `go.mod` and a `replace` pointing at `../`, so they build against
-the working tree and co-evolve with the debugger in a single clone. (Decided
-here; `examples/` doesn't exist yet — the first demo creates it.)
+the working tree and co-evolve with the debugger in a single clone.
 
 The nested module is the enforcement mechanism, and it is doing real work in
 both directions. A demo can never sneak a domain dependency into the
@@ -384,6 +383,10 @@ Two things explicitly **not** to build for this:
   (and TDZ-filtered) outside its block.
 - Hook cost is real (a Go call + closure per statement) — debug mode only,
   by design; `-nodebug` runs pristine source.
+- Error *strings* from sobek (e.g. an uncaught `TypeError` a host prints)
+  carry instrumented columns, since `OrigCol` is applied by the DAP server
+  to stack frames, not to message text. Lines are exact either way, so this
+  only shows as a column that points a little to the right of the fault.
 - The names `__dbg` and `__x` are reserved in debugged scripts.
 - **Editor and host must share a filesystem.** Breakpoint paths are matched
   by resolving symlinks and case-folding, which cannot relate a laptop path

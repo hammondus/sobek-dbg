@@ -1,0 +1,10 @@
+[
+	{ "type": "order.created", "id": "A-1001", "customer": "acme", "total": 42.5, "items": 2 },
+	{ "type": "order.created", "id": "A-1002", "customer": "globex", "total": 118, "items": 1 },
+	{ "type": "order.refunded", "id": "A-1001", "total": 42.5, "reason": "  damaged in transit  " },
+	{ "type": "order.created", "id": "A-1003", "customer": "acme", "total": 7.25, "items": 5 },
+	{ "type": "order.shipped", "id": "A-1002" },
+	{ "type": "order.created", "id": "A-1004", "customer": "initech", "total": 1420, "items": 12 },
+	{ "type": "order.refunded", "id": "A-1004", "total": 1420 },
+	{ "type": "order.created", "id": "A-1005", "customer": "globex", "total": 96.4, "items": 3 }
+]

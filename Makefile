@@ -1,20 +1,28 @@
 # sobekdbg — DAP step-debugger experiment for sobek-embedded scripts.
-.PHONY: build test run release clean docker-build deploy logs install-ext
+.PHONY: build test run run-events release clean docker-build deploy logs install-ext
 
 BIN := bin/demo
 # Static, stripped, reproducible-path release binaries.
 RELEASE_FLAGS := -trimpath -ldflags "-s -w"
 
+# examples/ is a separate module (see DESIGN-DECISIONS.md "Repo layout"), so
+# it needs its own go commands — the root ./... does not reach into it.
 build:
 	go build -o $(BIN) ./cmd/demo
+	cd examples && go build -o ../bin/events ./events
 
 test:
 	go vet ./...
 	go test -race ./...
+	cd examples && go vet ./... && go test -race ./...
 
 run: build
 	# -wait holds the script until VS Code attaches (F5 in this workspace).
 	./$(BIN) -wait testdata/sample.js
+
+# Same attach config, same port — run one at a time.
+run-events: build
+	./bin/events -wait
 
 release:
 	mkdir -p dist
