@@ -237,6 +237,134 @@ If plain JSDoc ever grates, the revisit path is position-preserving type
 stripping (the `ts-blank-space` approach: types blanked to whitespace, line
 *and* column positions survive) — not full transpilation with source maps.
 
+## No event loop: no `setTimeout`, no `fetch`
+
+Sobek is an interpreter, not a platform, so the platform surface a host offers
+is a deliberate choice rather than a gap to fill. The tempting fills —
+`setTimeout`, `setInterval`, `fetch` — are all rejected, and for one reason:
+each implies an event loop.
+
+An event loop is precisely what the pause design assumes away. Pausing **is**
+the hook parking the VM goroutine in a `select` loop; stepping **is** a depth
+comparison against `CaptureCallStack`. Both hold because a script runs
+straight through on one goroutine and the interpreter stack means what it
+appears to mean. Timer callbacks break that: a callback fires at an
+interpreter depth unrelated to the code that scheduled it, so step-over
+becomes ill-defined, and a paused VM goroutine cannot service a timer queue,
+so "pause" and "timers keep firing" are directly in conflict.
+
+The design-consistent equivalents already fit the model: `sleep(ms)` (exists
+in `cmd/demo`), a *synchronous* `http.get(...)` as a `HostBlocked` host call
+instead of `fetch`, and a jobs API for genuine "later / concurrently" work —
+each of which is a blocking host call, and therefore already a pause point.
+
+If some future requirement genuinely needs timer callbacks, that is this
+decision being revisited deliberately, with the pause and stepping model
+reworked to match. It is not a shim to add on a quiet afternoon.
+
+## Concurrency: pool compiled programs, not runtimes
+
+The instinctive answer to running scripts concurrently — a `sync.Pool` of
+pre-allocated `sobek.Runtime`s, checked out and back in per request —
+conflicts with the fresh-VM-per-run semantics the rest of the design assumes.
+A reused runtime keeps every global its previous script left behind, so
+checkout/checkin needs a reliable global reset that is hard to make airtight,
+and silently leaks state between unrelated runs when it isn't.
+
+If `sobek.New()` ever actually shows up in a profile, the k6-style answer is
+to pool the expensive half instead: compiled `*Program`s are shareable across
+runtimes — the debugger already caches them per path in `Load` — so share
+those and give each run a fresh, cheap `Runtime`. Parsing and compiling is the
+cost worth avoiding; allocating a runtime mostly isn't.
+
+Measure before pooling either way. Note that this is orthogonal to the
+one-VM-per-debugger limitation below: pooling addresses throughput for
+*undebugged* runs, while debugging concurrent scripts needs runs-as-DAP-threads
+bookkeeping in `dbg`, which is a separate piece of work.
+
+## Repo layout: demos in-tree, debugger in its own module
+
+`sobekdbg` has zero domain dependencies. It knows about scripts, source paths,
+breakpoints, pause/step and host-call blocking; it must never learn about
+tables, schemas, UIs or games. But a debugger for embedded scripting is only
+persuasive with hosts to look at, and a demo split across a second repository
+is a demo nobody clones.
+
+So: **one repository, two modules.** The debugger's `go.mod` stays at the root
+with sobek as its only requirement. Example hosts go under `examples/` with
+their *own* `go.mod` and a `replace` pointing at `../`, so they build against
+the working tree and co-evolve with the debugger in a single clone. (Decided
+here; `examples/` doesn't exist yet — the first demo creates it.)
+
+The nested module is the enforcement mechanism, and it is doing real work in
+both directions. A demo can never sneak a domain dependency into the
+debugger's `go.mod` — the one whose selling point is "sobek is the only
+dependency" — because it physically cannot write there; an accidental import
+is a compile error rather than a code-review comment. And `go get sobekdbg`
+never sees `examples/` at all: a consumer gets the debugger, not the demos.
+A single module with an `examples/` subdirectory was rejected for exactly
+that reason — every third-party library any demo ever wants would land in the
+root `go.mod` and `go.sum` and show up in every consumer's module graph.
+
+The cost is that `make test` has to recurse into the second module rather
+than relying on one `./...`, which is a line in the Makefile.
+
+`cmd/demo/` stays where it is, in the root module. It is not an example — it
+is the reference host, the executable documentation of the contract below,
+and the e2e tests drive it.
+
+## The host contract is a set of bindings, not a runtime abstraction
+
+What a host must do is small and should stay nameable: construct a `Debugger`,
+`Load` and `Attach` before running, route blocking host calls through
+`HostBlocked`, forward output through `Output`, and drive the `sobek.Runtime`
+from exactly one goroutine. That last one is not a style preference — it is
+what makes the race-freedom argument in "Pausing = blocking the VM goroutine"
+hold.
+
+The tempting next step — hiding the runtime behind an interface with
+`Run`/`Step`/`SetBreakpoint`/`GetVariables` — is rejected. `Step()` presumes a
+VM you can single-step, which is precisely the capability sobek does not have
+and the entire instrumenter exists to avoid needing. It would be an
+abstraction over one implementation, shaped like a VM we deliberately aren't
+using, and it would invite host authors to reach for operations the design
+can't honour.
+
+Note also that `Done` is per *process*, not per *invocation*: it emits
+`terminated` and `exited`. A host in the common embedding shape — load a
+script once, then call exported JS functions many times as events arrive —
+calls `Load`/`Attach` once, calls into JS as often as it likes with hooks
+firing and breakpoints hitting throughout, and calls `Done` only when it is
+finished for good.
+
+## Remote debugging: edit locally, execute where the data is
+
+The realistic deployment is scripts authored on a laptop under git but only
+meaningful running on the server, next to the data. DAP was built for this and
+the transport is already remote-capable — `DebugAdapterServer` over TCP needs
+nothing new.
+
+The one thing that genuinely breaks is source path mapping, covered as the
+last known limitation below and README porting item 4: the editor's
+`/Users/craig/proj/scripts/a.js` and the server's `/app/scripts/a.js` are the
+same file with no filesystem in common to prove it, so symlink resolution and
+case-folding cannot relate them. `localRoot`/`remoteRoot` applied in both
+directions is the whole fix, and it is the same mechanism delve, node and
+debugpy use.
+
+Two things explicitly **not** to build for this:
+
+- **A file-sync agent.** The obvious-looking design (Go binary, WebSocket,
+  bidirectional fsnotify, conflict resolution) is a distributed filesystem
+  with a two-button conflict UI, and it creates two sources of truth — a
+  server writing files back into a working tree that has uncommitted edits is
+  a data-loss path. Cheaper answers, in order: VS Code Remote-SSH (zero sync
+  code), `git pull` on the server as the deploy step, or a one-way "POST this
+  file on save" for the inner loop.
+- **Anything justified by "breakpoints won't persist otherwise."** VS Code
+  persists breakpoints client-side per file URI and re-sends `setBreakpoints`
+  at every session start. Persistence is not a reason to sync files.
+
 ## Known limitations (acceptable for the prototype)
 
 - Concise arrow bodies (`x => x * 2`) have no statement to hook; stepping
