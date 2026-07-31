@@ -1,0 +1,31 @@
+{
+	"name": "sobekdbg",
+	"displayName": "sobek DAP attach",
+	"description": "Registers the 'sobek' debug type and connects it to a running sobekdbg DAP server over TCP.",
+	"version": "0.0.1",
+	"publisher": "local",
+	"engines": { "vscode": "^1.80.0" },
+	"main": "./extension.js",
+	"activationEvents": ["onDebugResolve:sobek"],
+	"contributes": {
+		"debuggers": [
+			{
+				"type": "sobek",
+				"label": "sobek script debugger",
+				"languages": ["javascript"],
+				"configurationAttributes": {
+					"attach": {
+						"properties": {
+							"host": { "type": "string", "description": "DAP server host", "default": "127.0.0.1" },
+							"port": { "type": "number", "description": "DAP server port", "default": 4711 },
+							"stopOnEntry": { "type": "boolean", "description": "Pause on the first statement", "default": false }
+						}
+					}
+				},
+				"initialConfigurations": [
+					{ "type": "sobek", "request": "attach", "name": "Attach to sobek", "port": 4711 }
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,13 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "sobek",
+			"request": "attach",
+			"name": "Attach to sobek demo",
+			"host": "127.0.0.1",
+			"port": 4711,
+			"stopOnEntry": true
+		}
+	]
+}

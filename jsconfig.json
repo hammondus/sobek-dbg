@@ -1,0 +1,19 @@
+{
+	// Editor-only type checking (VS Code / tsserver). Nothing in the build
+	// or runtime reads this file — scripts run as plain JS in sobek, and the
+	// file on disk is byte-for-byte what executes (see DESIGN-DECISIONS.md).
+	"compilerOptions": {
+		"checkJs": true,
+		"strict": true,
+		// sobek has no DOM and no Node; es2017 approximates its ES level and
+		// keeps browser/Node globals out of autocomplete.
+		"target": "es2017",
+		"lib": ["es2017"],
+		// Don't auto-load @types packages (e.g. Node types dragged in via
+		// vscode-ext's node_modules) into script scope.
+		"types": []
+	},
+	// No "include": pick up every .js/.d.ts in the repo (testdata/ now,
+	// future script dirs automatically), minus the non-script trees.
+	"exclude": ["vscode-ext", "bin", "dist", "node_modules"]
+}
