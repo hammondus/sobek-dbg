@@ -1,5 +1,5 @@
 # sobekdbg — DAP step-debugger experiment for sobek-embedded scripts.
-.PHONY: build test run run-events release clean docker-build deploy logs install-ext
+.PHONY: build test run run-events run-sim release clean docker-build deploy logs install-ext
 
 BIN := bin/demo
 # Static, stripped, reproducible-path release binaries.
@@ -9,7 +9,7 @@ RELEASE_FLAGS := -trimpath -ldflags "-s -w"
 # it needs its own go commands — the root ./... does not reach into it.
 build:
 	go build -o $(BIN) ./cmd/demo
-	cd examples && go build -o ../bin/events ./events
+	cd examples && go build -o ../bin/events ./events && go build -o ../bin/sim ./sim
 
 test:
 	go vet ./...
@@ -23,6 +23,9 @@ run: build
 # Same attach config, same port — run one at a time.
 run-events: build
 	./bin/events -wait
+
+run-sim: build
+	./bin/sim -wait
 
 release:
 	mkdir -p dist

@@ -34,13 +34,17 @@ Run without debugging (what production would do): `./bin/demo -nodebug testdata/
 ## Examples
 
 `examples/` is a separate module (so demos can't leak dependencies into the
-debugger's `go.mod`) holding example hosts. Start with the event host —
-the embedding shape `cmd/demo` doesn't show, where the script registers
-handlers and the host calls into JS as events arrive:
+debugger's `go.mod`) holding example hosts — both showing embedding shapes
+`cmd/demo` doesn't, where the host calls *into* JS rather than running a
+script as main:
 
 ```sh
-make run-events    # then F5, and see examples/README.md for what to try
+make run-events    # script registers handlers, host feeds it events
+make run-sim       # live tick loop: pause it, revive a dead entity from
+                   # the Debug Console, watch the grid change
 ```
+
+Then F5. See `examples/README.md` for what to try in each.
 
 ## Tests
 

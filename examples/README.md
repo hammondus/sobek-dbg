@@ -58,3 +58,53 @@ Nine calls, all of them in `main.go`:
 
 The VM is only ever touched from `main`'s goroutine. That is the one rule a
 host has to keep.
+
+## `sim/` — pause a live simulation and change it
+
+The script owns the state (a `world` global) and exports `tick()`; the host
+owns the clock and the screen, calling `tick()` about eight times a second and
+drawing the result as a framed grid. Three entities wander and lose 1 hp per
+tick; at 0 hp they stop moving and render lowercase.
+
+```sh
+make run-sim           # builds, then holds until VS Code attaches
+```
+
+F5, then continue past the entry stop and watch it run. **A** starts on 8 hp,
+so it dies within a few seconds — that's your cue.
+
+1. **Hit Pause** (F6) while it's running. The grid freezes because the VM
+   goroutine *is* the thing that was paused. You land either on a statement in
+   `step()` or in the inter-tick wait ("Paused in host call tick delay") —
+   both are real pause points, and both let you evaluate.
+2. **Look around.** The Variables pane has the current entity `e` alongside
+   the file-scope `world`. In the Debug Console try `e.hp`, `world.tick`,
+   `world.entities.length`.
+3. **Revive A.** With A showing DEAD, evaluate `world.entities[0].hp = 100`
+   and continue. It starts moving again, on screen, immediately. Nothing was
+   recompiled and nothing restarted — the debugger wrote into the live object
+   graph, which is what the direct-eval thunk buys (DESIGN-DECISIONS.md, "The
+   eval thunk").
+4. **Conditional breakpoint** on the bounce check (line 53), condition
+   `e.name === "C"` — you stop only on C hitting a wall, while B carries on
+   bouncing unremarked.
+
+`./bin/sim -nodebug` runs the pristine source; `-ticks` and `-delay` control
+length and speed.
+
+### What's different from `events/`
+
+- The host **looks up a function the script defined** (`vm.Get("tick")` +
+  `AssertFunction`) instead of being handed callbacks. Both idioms are worth
+  seeing; neither needs anything from `dbg`.
+- The inter-tick delay goes through **`HostBlocked`** rather than a bare
+  `time.Sleep`. That is what makes a Pause pressed between ticks land
+  immediately instead of waiting for the next statement to run — and you can
+  still evaluate while parked there, because the pause reuses the last
+  statement's eval thunk, whose scope is still materialized.
+- `log()` is routed to the Debug Console **only**. stdout is the grid; a host
+  that owns the screen has to decide where script output goes, and "wherever
+  `fmt.Println` points" is the wrong answer.
+- The host sets `sobek.TagFieldNameMapper("json", true)` so `ExportTo` reads
+  the JS property names. Without it the export silently yields zeros — worth
+  knowing, since nothing errors.
